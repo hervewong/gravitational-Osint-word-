@@ -1,1 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f6feb">
+<title>Poste OSINT (Avancé & Chine)</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--tx:#1c2128;--bd:#c8ccd4;--ac:#1f6feb;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1e2227;--card:#2d333b;--tx:#e6e6e6;--bd:#444c56;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1e2227;--card:#2d333b;--tx:#e6e6e6;--bd:#444c56;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px system-ui,sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:8px;z-index:9;border-bottom:1px solid var(--bd)}
+.row{display:flex;gap:6px;margin:6px 0}
+input,select,button,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:9px}
+input,select,textarea{flex:1;min-width:0;width:100%;margin:3px 0}
+button{cursor:pointer}
+nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+nav button{white-space:nowrap}
+nav button.on,#go{background:var(--ac);border-color:var(--ac);color:#fff}
+main{padding:8px}
+details,.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;margin:8px 0;padding:4px 10px}
+.card.ac{border-color:var(--ac)}
+summary{font-weight:600;padding:10px 0}
+.r{display:flex;align-items:center;border-top:1px solid var(--bd)}
+.r a{flex:1;padding:11px 6px;color:var(--tx);text-decoration:none}
+.r small{display:block;opacity:.65;font-size:12px}
+.fav-btn{background:none;border:none;cursor:pointer;font-size:18px;padding:0 8px;}
+.sec{font-weight:600;margin:14px 4px 2px}
+.hint{opacity:.75;padding:8px 2px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <input id="q" placeholder="Rechercher ou cible : mot-clé, domaine, IP, e-mail, pseudo…" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button id="gs" title="Rechercher">🔍</button>
+    <button id="openAll" title="Ouvrir tous les liens filtrés">🚀 Tout ouvrir</button>
+    <button id="th" title="Clair / sombre">◐</button>
+  </div>
+  <nav>
+    <button data-t="all" class="on">Recherche</button>
+    <button data-t="osint">OSINT</button>
+    <button data-t="engines">Moteurs</button>
+    <button data-t="china">🇨🇳 Spécial Chine</button>
+    <button data-t="favs">⭐ Favoris</button>
+  </nav>
+</header>
+<main>
+  <div id="out"></div>
+  <div class="hint" id="st"></div>
+  <div class="hint">Astuce : Tape ta cible en haut pour l'injecter dynamiquement dans tous les moteurs et outils. Sources publiques uniquement.</div>
+</main>
+<script>
+const DATA = {
+  "osint": [
+    {"g": "Domaine / IP", "t": [
+      {"n": "Whois", "u": "https://who.is/whois/{q}"},
+      {"n": "Enregistrements DNS", "u": "https://viewdns.info/dnsrecord/?domain={q}"},
+      {"n": "Certificats (crt.sh)", "u": "https://crt.sh/?q={q}"},
+      {"n": "VirusTotal", "u": "https://www.virustotal.com/gui/search/{q}"},
+      {"n": "Shodan", "u": "https://www.shodan.io/search?query={q}"},
+      {"n": "BuiltWith (technologies)", "u": "https://builtwith.com/{q}"},
+      {"n": "IPinfo", "u": "https://ipinfo.io/{q}"}
+    ]},
+    {"g": "E-mail / pseudo", "t": [
+      {"n": "Epieos (e-mail)", "u": "https://epieos.com/?q={q}"},
+      {"n": "Have I Been Pwned", "u": "https://haveibeenpwned.com/"},
+      {"n": "WhatsMyName (pseudo)", "u": "https://whatsmyname.app/?q={q}"},
+      {"n": "GitHub", "u": "https://github.com/{q}"},
+      {"n": "Reddit", "u": "https://www.reddit.com/user/{q}"}
+    ]}
+  ],
+  "engines": [
+    {"g": "Généralistes Mondiaux", "t": [
+      {"n": "Google", "u": "https://www.google.com/search?q={q}"},
+      {"n": "Bing", "u": "https://www.bing.com/search?q={q}"},
+      {"n": "DuckDuckGo", "u": "https://duckduckgo.com/?q={q}"},
+      {"n": "Brave Search", "u": "https://search.brave.com/search?q={q}"},
+      {"n": "Yandex", "u": "https://yandex.com/search/?text={q}"}
+    ]}
+  ],
+  "china": [
+    {"g": "🇨🇳 Moteurs de recherche et portails chinois", "t": [
+      {"n": "Baidu", "u": "https://www.baidu.com/s?wd={q}"},
+      {"n": "Sogou", "u": "https://www.sogou.com/web?query={q}"},
+      {"n": "360 Search", "u": "https://www.so.com/s?q={q}"},
+      {"n": "Bing Chine", "u": "https://cn.bing.com/search?q={q}"},
+      {"n": "Toutiao", "u": "https://so.toutiao.com/search?keyword={q}"},
+      {"n": "Quark", "u": "https://quark.sm.cn/s?q={q}"},
+      {"n": "Shenma", "u": "https://m.sm.cn/s?q={q}"}
+    ]},
+    {"g": "🇨🇳 Réseaux sociaux & Communautés en Chine", "t": [
+      {"n": "Weibo", "u": "https://s.weibo.com/weibo?q={q}"},
+      {"n": "Zhihu", "u": "https://www.zhihu.com/search?q={q}"},
+      {"n": "Bilibili", "u": "https://search.bilibili.com/all?keyword={q}"},
+      {"n": "Xiaohongshu", "u": "https://www.xiaohongshu.com/search_result?keyword={q}"},
+      {"n": "Douban", "u": "https://www.douban.com/search?q={q}"},
+      {"n": "Baidu Tieba", "u": "https://tieba.baidu.com/f/search/res?qw={q}"},
+      {"n": "Baidu Zhidao", "u": "https://zhidao.baidu.com/search?word={q}"},
+      {"n": "Sogou WeChat", "u": "https://weixin.sogou.com/weixin?type=2&query={q}"}
+    ]},
+    {"g": "🇨🇳 Vidéos et Live-streaming en Chine", "t": [
+      {"n": "Douyin", "u": "https://www.douyin.com/search/{q}"},
+      {"n": "Kuaishou", "u": "https://www.kuaishou.com/search/video?searchKey={q}"},
+      {"n": "Tencent Video", "u": "https://v.qq.com/x/search/?q={q}"},
+      {"n": "iQIYI", "u": "https://so.iqiyi.com/so/q_{q}"},
+      {"n": "Youku", "u": "https://so.youku.com/search_video/q_{q}"},
+      {"n": "Xigua Video", "u": "https://www.ixigua.com/search/{q}"},
+      {"n": "Douyu", "u": "https://www.douyu.com/search/?kw={q}"},
+      {"n": "Huya", "u": "https://www.huya.com/search?hsk={q}"}
+    ]},
+    {"g": "🇨🇳 Entreprises et Données Officielles (Chine)", "t": [
+      {"n": "Tianyancha", "u": "https://www.tianyancha.com/search?key={q}"},
+      {"n": "Qichacha", "u": "https://www.qcc.com/web/search?key={q}"},
+      {"n": "Aiqicha", "u": "https://aiqicha.baidu.com/s?q={q}"},
+      {"n": "Qixin", "u": "https://www.qixin.com/search?key={q}"},
+      {"n": "Whois Chinois (Chinaz)", "u": "https://whois.chinaz.com/{q}"},
+      {"n": "IP / Domaine (Chinaz)", "u": "https://ip.chinaz.com/{q}"},
+      {"n": "Recherche ICP (MIIT)", "u": "https://beian.miit.gov.cn/"}
+    ]},
+    {"g": "🇨🇳 Cartographie & Savoir en Chine", "t": [
+      {"n": "Baidu Maps", "u": "https://map.baidu.com/search/{q}"},
+      {"n": "Gaode Maps", "u": "https://www.amap.com/search?query={q}"},
+      {"n": "Baidu Images", "u": "https://image.baidu.com/search/index?tn=baiduimage&word={q}"},
+      {"n": "Baidu Baike", "u": "https://baike.baidu.com/search?word={q}"},
+      {"n": "Baidu Scholar", "u": "https://xueshu.baidu.com/s?wd={q}"}
+    ]}
+  ]
+};
+
+const q = document.getElementById('q'), out = document.getElementById('out'), st = document.getElementById('st');
+let tab = 'all';
+
+let favorites = JSON.parse(localStorage.getItem('osint_favs') || '[]');
+
+function render() {
+  const val = q.value.trim();
+  let html = '';
+  let total = 0;
+  let currentCats = [];
+
+  if (tab === 'favs') {
+    currentCats = [{ g: '⭐ Mes Outils Favoris', t: favorites }];
+  } else if (tab === 'all') {
+    currentCats = [...(DATA.osint || []), ...(DATA.engines || []), ...(DATA.china || [])];
+  } else {
+    currentCats = DATA[tab] || [];
+  }
+
+  currentCats.forEach(cat => {
+    let rows = '';
+    cat.t.forEach(item => {
+      let url = item.u;
+      if (val) {
+        url = url.replace(/{q}/g, encodeURIComponent(val));
+      } else {
+        url = url.split('?')[0];
+      }
+
+      const isFav = favorites.some(f => f.n === item.n);
+      const starIcon = isFav ? '⭐' : '☆';
+
+      rows += `
+        <div class="r">
+          <button class="fav-btn" data-name="${encodeURIComponent(item.n)}" data-url="${encodeURIComponent(item.u)}" data-group="${encodeURIComponent(cat.g)}" title="Favoris">${starIcon}</button>
+          <a href="${url}" target="_blank" rel="noopener" class="tool-link">
+            ${item.n}
+            <small>${url}</small>
+          </a>
+        </div>`;
+      total++;
+    });
+    if (rows) {
+      html += `<div class="card"><div class="sec">${cat.g}</div>${rows}</div>`;
+    }
+  });
+
+  out.innerHTML = html || '<div class="card"><div class="hint">Aucun outil trouvé ou favori vide.</div></div>';
+  st.textContent = `${total} outil(s) affiché(s)`;
+
+  // Attacher les écouteurs sur les boutons favoris générés
+  document.querySelectorAll('.fav-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const name = decodeURIComponent(e.target.dataset.name);
+      const url = decodeURIComponent(e.target.dataset.url);
+      const group = decodeURIComponent(e.target.dataset.group);
+      
+      const index = favorites.findIndex(f => f.n === name);
+      if (index > -1) {
+        favorites.splice(index, 1);
+      } else {
+        favorites.push({ n: name, u: url, g: group });
+      }
+      localStorage.setItem('osint_favs', JSON.stringify(favorites));
+      render();
+    });
+  });
+}
+
+document.getElementById('openAll').addEventListener('click', () => {
+  const links = document.querySelectorAll('.tool-link');
+  if(links.length > 15) {
+    if(!confirm(`Attention, vous vous apprêtez à ouvrir ${links.length} onglets d'un coup. Continuer ?`)) return;
+  }
+  links.forEach(link => {
+    window.open(link.getAttribute('href'), '_blank');
+  });
+});
+
+q.addEventListener('input', render);
+document.querySelectorAll('nav button').forEach(b => {
+  b.addEventListener('click', e => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.remove('on'));
+    e.target.classList.add('on');
+    tab = e.target.dataset.t;
+    render();
+  });
+});
+
+document.getElementById('th').addEventListener('click', () => {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+document.getElementById('gs').addEventListener('click', render);
+
+render();
+</script>
+</body>
+</html>
 
